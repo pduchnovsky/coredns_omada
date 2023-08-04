@@ -85,6 +85,7 @@ func (o *Omada) updateZones(ctx context.Context) error {
 	log.Info("update: updating zones...")
 	zones := make(map[string]*file.Zone)
 
+	//
 	var networks []omada.OmadaNetwork
 	for _, s := range o.sites {
 		log.Debugf("update: getting networks for site: %s", s)
@@ -96,6 +97,7 @@ func (o *Omada) updateZones(ctx context.Context) error {
 		networks = append(networks, n...)
 	}
 
+	//
 	var clients []omada.Client
 	for _, s := range o.sites {
 		log.Debugf("update: getting clients for site: %s", s)
@@ -108,6 +110,7 @@ func (o *Omada) updateZones(ctx context.Context) error {
 	}
 	log.Debugf("update: found '%d' omada clients\n", len(clients))
 
+	//
 	var devices []omada.Device
 	for _, s := range o.sites {
 		log.Debugf("update: getting devices for site: %s", s)
@@ -119,6 +122,18 @@ func (o *Omada) updateZones(ctx context.Context) error {
 		devices = append(devices, d...)
 	}
 	log.Debugf("update: found '%d' omada devices\n", len(devices))
+
+	var dhcpReservations []omada.DhcpReservation
+	for _, s := range o.sites {
+		log.Debugf("update: getting dhcp reservations for site: %s", s)
+		o.controller.SetSite(s)
+		dhcp, err := o.controller.GetDhcpReservations()
+		if err != nil {
+			return fmt.Errorf("error getting dhcp reservations from omada controller: %w", err)
+		}
+		dhcpReservations = append(dhcpReservations, dhcp...)
+	}
+	log.Debugf("update: found '%d' dhcp reservations\n", len(dhcpReservations))
 
 	// reverse zones
 	for _, network := range networks {
@@ -195,6 +210,19 @@ func (o *Omada) updateZones(ctx context.Context) error {
 					A: net.ParseIP(device.IP)}
 				zones[dnsDomain].Insert(a)
 			}
+		}
+
+		// add dhcp reservations to zone
+		for _, r := range dhcpReservations {
+			name := r.ClientName
+			if r.ClientName == r.Mac {
+				name = r.Description
+			}
+			fqdn := fmt.Sprintf("%s.%s", name, dnsDomain)
+			a := &dns.A{Hdr: dns.RR_Header{Name: fqdn, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+				A: net.ParseIP(r.IP)}
+			zones[dnsDomain].Insert(a)
+			log.Debugf("-- insert dhcp name: %s, ip: %s", name, r.IP)
 		}
 
 		log.Debugf("update: zone %s contains %d records", dnsDomain, zones[dnsDomain].Count)
