@@ -123,7 +123,10 @@ func (o *Omada) updateZones(ctx context.Context) error {
 	// reverse zones
 	for _, network := range networks {
 		dnsDomain := network.Domain
-		_, subnet, _ := net.ParseCIDR(network.Subnet)
+		_, subnet, err := net.ParseCIDR(network.Subnet)
+		if err != nil {
+			return fmt.Errorf("failed to parse subnet: %s, %w", network.Subnet, err)
+		}
 		for _, client := range clients {
 			// get PTR zone
 			ptrZone := getParentPtrZoneFromIp(client.Ip)
